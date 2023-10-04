@@ -2446,7 +2446,7 @@ jl_code_instance_t *jl_compile_method_internal(jl_method_instance_t *mi, size_t 
         jl_code_instance_t *codeinst = jl_get_method_inferred(
                 mi, codeinst2->rettype,
                 jl_atomic_load_relaxed(&codeinst2->min_world), jl_atomic_load_relaxed(&codeinst2->max_world),
-                codeinst2->debuginfo);
+                jl_atomic_load_relaxed(&codeinst2->debuginfo));
         if (jl_atomic_load_relaxed(&codeinst->invoke) == NULL) {
             codeinst->rettype_const = codeinst2->rettype_const;
             jl_gc_wb(codeinst, codeinst->rettype_const);

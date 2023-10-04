@@ -8657,6 +8657,7 @@ static jl_llvm_functions_t
         DebugLoc loc;
         StringRef file;
         ssize_t line;
+        ssize_t line0; // if this represents pc=1, then also cover the entry to the function (pc=0)
         bool is_user_code;
         int32_t edgeid;
         bool sameframe(const DebugLineTable &other) const {
@@ -8667,12 +8668,12 @@ static jl_llvm_functions_t
     DebugLineTable topinfo;
     topinfo.file = ctx.file;
     topinfo.line = toplineno;
+    topinfo.line0 = 0;
     topinfo.is_user_code = mod_is_user_mod;
     topinfo.loc = topdebugloc;
     topinfo.edgeid = 0;
     std::map<std::tuple<StringRef, StringRef>, DISubprogram*> subprograms;
     SmallVector<DebugLineTable, 0> prev_lineinfo, new_lineinfo;
-    new_lineinfo.push_back(topinfo);
     auto update_lineinfo = [&] (size_t pc) {
         std::function<bool(jl_debuginfo_t*, jl_value_t*, size_t, size_t)> append_lineinfo =
                 [&] (jl_debuginfo_t *debuginfo, jl_value_t *func, size_t to, size_t pc) -> bool {
@@ -8681,16 +8682,16 @@ static jl_llvm_functions_t
                     func = debuginfo->def; // this is inlined
                 struct jl_codeloc_t lineidx = jl_uncompress1_codeloc(debuginfo->codelocs, pc);
                 size_t i = lineidx.line;
-                if (pc > 0 && i >= 0 && (jl_value_t*)debuginfo->linetable != jl_nothing) {
+                if (i < 0) // pc out of range: broken debuginfo?
+                    return false;
+                if (i == 0 && lineidx.to == 0) // no update
+                    return false;
+                if (pc > 0 && (jl_value_t*)debuginfo->linetable != jl_nothing) {
                     // indirection node
                     if (!append_lineinfo(debuginfo->linetable, func, to, i))
                         return false; // no update
                 }
                 else {
-                    if (i < 0) // pc out of range: broken debuginfo?
-                        return false;
-                    if (i == 0 && lineidx.to == 0) // no update
-                        return false;
                     // actual node
                     DebugLineTable info;
                     info.edgeid = to;
@@ -8699,6 +8700,13 @@ static jl_llvm_functions_t
                         modu = ctx.module;
                     info.file = jl_debuginfo_file1(debuginfo);
                     info.line = i;
+                    info.line0 = 0;
+                    if (pc == 1) {
+                        struct jl_codeloc_t lineidx = jl_uncompress1_codeloc(debuginfo->codelocs, 0);
+                        assert(lineidx.to == 0 && lineidx.pc == 0);
+                        if (lineidx.line > 0 && info.line != lineidx.line)
+                            info.line0 = lineidx.line;
+                    }
                     if (info.file.empty())
                         info.file = "<missing>";
                     if (modu == ctx.module)
@@ -8867,8 +8875,11 @@ static jl_llvm_functions_t
         for (; dbg < new_lineinfo.size(); dbg++) {
             const auto &newdbg = new_lineinfo[dbg];
             bool is_tracked = in_tracked_path(newdbg.file);
-            if (do_coverage(newdbg.is_user_code, is_tracked))
+            if (do_coverage(newdbg.is_user_code, is_tracked)) {
+                if (newdbg.line0 != 0 && (dbg >= prev_lineinfo.size() || newdbg.edgeid != prev_lineinfo[dbg].edgeid || newdbg.line0 != prev_lineinfo[dbg].line))
+                    coverageVisitLine(ctx, newdbg.file, newdbg.line0);
                 coverageVisitLine(ctx, newdbg.file, newdbg.line);
+            }
         }
     };
     auto mallocVisitStmt = [&] (Value *sync, bool have_dbg_update) {
@@ -8908,18 +8919,8 @@ static jl_llvm_functions_t
                     struct jl_codeloc_t lineidx = jl_uncompress1_codeloc(debuginfo->codelocs, pc);
                     if (lineidx.line == -1)
                         break;
-                    jl_debuginfo_t *linetable = debuginfo->linetable;
-                    while (lineidx.line >= 0 && (jl_value_t*)linetable != jl_nothing) {
-                        if (lineidx.line == 0) {
-                            lineidx = jl_uncompress1_codeloc(linetable->codelocs, lineidx.line);
-                            break;
-                        }
-                        lineidx = jl_uncompress1_codeloc(linetable->codelocs, lineidx.line);
-                        linetable = linetable->linetable;
-                    }
-                    if (lineidx.line > 0) {
+                    if (lineidx.line > 0)
                         jl_coverage_alloc_line(file, lineidx.line);
-                    }
                 }
             }
         };
@@ -8975,12 +8976,12 @@ static jl_llvm_functions_t
         BB[label] = bb;
     }
 
+    new_lineinfo.push_back(topinfo);
     Value *sync_bytes = nullptr;
     if (do_malloc_log(true, mod_is_tracked))
         sync_bytes = ctx.builder.CreateCall(prepare_call(diff_gc_total_bytes_func), {});
-    // coverage for the function definition line number
-    if (do_coverage(topinfo.is_user_code, mod_is_tracked))
-        coverageVisitLine(ctx, topinfo.file, topinfo.line);
+    // coverage for the function definition line number (topinfo)
+    coverageVisitStmt();
 
     find_next_stmt(0);
     while (cursor != -1) {

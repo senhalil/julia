@@ -302,7 +302,6 @@ end
 
 function ir_inline_linetable!(debuginfo::DebugInfoStream, inlinee_debuginfo::DebugInfo, inlinee::MethodInstance)
     # Append the linetable of the inlined function to our edges table
-    extra_coverage_line = false
     linetable_offset = 1
     while true
         if linetable_offset > length(debuginfo.edges)
@@ -313,7 +312,7 @@ function ir_inline_linetable!(debuginfo::DebugInfoStream, inlinee_debuginfo::Deb
         end
         linetable_offset += 1
     end
-    return Int32(linetable_offset), extra_coverage_line
+    return Int32(linetable_offset)
 end
 
 function ir_prepare_inlining!(insert_node!::Inserter, inline_target::Union{IRCode, IncrementalCompact},
@@ -321,9 +320,9 @@ function ir_prepare_inlining!(insert_node!::Inserter, inline_target::Union{IRCod
     def = mi.def::Method
     debuginfo = inline_target isa IRCode ? inline_target.debuginfo : inline_target.ir.debuginfo
 
-    linetable_offset, extra_coverage_line = ir_inline_linetable!(debuginfo, di, mi)
+    linetable_offset = ir_inline_linetable!(debuginfo, di, mi)
     topline = (inlined_at, linetable_offset, Int32(0))
-    if extra_coverage_line
+    if should_insert_coverage(def.module, di)
         insert_node!(NewInstruction(Expr(:code_coverage_effect), Nothing, topline))
     end
     spvals_ssa = nothing

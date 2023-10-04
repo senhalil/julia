@@ -337,7 +337,6 @@ let world = Base.get_world_counter()
     match = Base._which(Tuple{typeof(sin), Int}; world)
     mi = Core.Compiler.specialize_method(match)
     lwr = Core.Compiler.retrieve_code_info(mi, world)
-    #lwr = Core.DebugInfo(mi, lwr.debuginfo, Core.svec(), "") # TODO: @ccall jl_compress_debuginfo(UInt32[(ip, 0, 0)... for ip in 1:length(lwr.code)))::Any
     nstmts = length(lwr.code)
     di = Core.DebugInfo(Core.Compiler.DebugInfoStream(mi, lwr.debuginfo, nstmts), nstmts)
     lwr.debuginfo = di

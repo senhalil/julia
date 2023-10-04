@@ -181,10 +181,9 @@ julia> nice(::Cat) = "nice 😸"
 ERROR: invalid method definition in Main: function NiceStuff.nice must be explicitly imported to be extended
 Stacktrace:
  [1] top-level scope
-   @ :0
+   @ none:0
  [2] top-level scope
    @ none:1
-
 ```
 
 This error prevents accidentally adding methods to functions in other modules that you only intended to use.

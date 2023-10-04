@@ -370,9 +370,9 @@ function append_scopes!(scopes::Vector{LineInfoNode}, pc::Int, debuginfo, @nospe
         codeloc = getdebugidx(debuginfo, pc)
         line::Int = codeloc[1]
         inl_to::Int = codeloc[2]
+        doupdate &= line != 0 || inl_to != 0 # disabled debug info--no update
         if debuginfo.linetable === nothing || pc <= 0 || line < 0
-            line < 0 && (line = 0) # broken debug info
-            doupdate &= line != 0 || inl_to != 0 # disabled debug info--no update
+            line < 0 && (doupdate = false; line = 0) # broken debug info
             push!(scopes, LineInfoNode(def, debuginfo_file1(debuginfo), Int32(line)))
         else
             doupdate = append_scopes!(scopes, line, debuginfo.linetable::Core.DebugInfo, def) && doupdate

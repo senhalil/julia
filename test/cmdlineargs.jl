@@ -560,15 +560,14 @@ let exename = `$(Base.julia_cmd()) --startup-file=no --color=no`
             end
             do_test()
             """), """
-            DA:1,1
             DA:2,1
             DA:3,1
             DA:5,1
             DA:6,0
             DA:9,1
             DA:10,1
-            LH:6
-            LF:7
+            LH:5
+            LF:6
             """)
         @test contains(coverage_info_for("""
             function cov_bug()
