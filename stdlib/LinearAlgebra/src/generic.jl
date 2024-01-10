@@ -197,7 +197,10 @@ match the length of the second, $(length(X))."))
     C
 end
 
-@inline function mul!(C::AbstractArray, s::Number, X::AbstractArray, alpha::Number, beta::Number)
+@inline mul!(C::AbstractArray, s::Number, X::AbstractArray, alpha::Number, beta::Number) =
+    _lscale_add!(C, s, X, alpha, beta)
+
+@inline function _lscale_add!(C::AbstractArray, s::Number, X::AbstractArray, alpha::Number, beta::Number)
     if axes(C) == axes(X)
         C .= (s .* X) .*ₛ alpha .+ C .*ₛ beta
     else
@@ -205,7 +208,10 @@ end
     end
     return C
 end
-@inline function mul!(C::AbstractArray, X::AbstractArray, s::Number, alpha::Number, beta::Number)
+@inline mul!(C::AbstractArray, X::AbstractArray, s::Number, alpha::Number, beta::Number) =
+    _rscale_add!(C, X, s, alpha, beta)
+
+@inline function _rscale_add!(C::AbstractArray, X::AbstractArray, s::Number, alpha::Number, beta::Number)
     if axes(C) == axes(X)
         C .= (X .* s) .*ₛ alpha .+ C .*ₛ beta
     else
@@ -406,7 +412,7 @@ julia> triu(a)
  0.0  0.0  0.0  1.0
 ```
 """
-triu(M::AbstractMatrix) = triu!(copy(M))
+triu(M::AbstractMatrix) = triu!(copymutable(M))
 
 """
     tril(M)
@@ -430,7 +436,7 @@ julia> tril(a)
  1.0  1.0  1.0  1.0
 ```
 """
-tril(M::AbstractMatrix) = tril!(copy(M))
+tril(M::AbstractMatrix) = tril!(copymutable(M))
 
 """
     triu(M, k::Integer)
@@ -461,7 +467,7 @@ julia> triu(a,-3)
  1.0  1.0  1.0  1.0
 ```
 """
-triu(M::AbstractMatrix,k::Integer) = triu!(copy(M),k)
+triu(M::AbstractMatrix,k::Integer) = triu!(copymutable(M),k)
 
 """
     tril(M, k::Integer)
@@ -492,7 +498,7 @@ julia> tril(a,-3)
  1.0  0.0  0.0  0.0
 ```
 """
-tril(M::AbstractMatrix,k::Integer) = tril!(copy(M),k)
+tril(M::AbstractMatrix,k::Integer) = tril!(copymutable(M),k)
 
 """
     triu!(M)
@@ -1828,7 +1834,7 @@ Calculates the determinant of a matrix using the
 [Bareiss Algorithm](https://en.wikipedia.org/wiki/Bareiss_algorithm).
 Also refer to [`det_bareiss!`](@ref).
 """
-det_bareiss(M) = det_bareiss!(copy(M))
+det_bareiss(M) = det_bareiss!(copymutable(M))
 
 
 
@@ -1971,7 +1977,7 @@ normalize(x, p::Real) = x / norm(x, p)
 
 Copies a triangular part of a matrix `A` to another matrix `B`.
 `uplo` specifies the part of the matrix `A` to be copied to `B`.
-Set `uplo = 'L'` for the lower triangular part or `uplo = 'U'
+Set `uplo = 'L'` for the lower triangular part or `uplo = 'U'`
 for the upper triangular part.
 
 !!! compat "Julia 1.11"
