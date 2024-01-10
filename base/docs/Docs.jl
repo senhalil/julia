@@ -3,7 +3,7 @@
 """
     Docs
 
-The `Docs` module provides the `@doc` macro which can be used to set and retrieve
+The `Docs` module provides the [`@doc`](@ref) macro which can be used to set and retrieve
 documentation metadata for Julia objects.
 
 Please see the manual section on [documentation](@ref man-documentation) for more
@@ -674,5 +674,22 @@ function hasdoc(binding::Docs.Binding, sig::Type = Union{})
     return alias == binding ? false : hasdoc(alias, sig)
 end
 
+
+"""
+    undocumented_names(mod::Module; private=false)
+
+Return a sorted vector of undocumented symbols in `module` (that is, lacking docstrings).
+`private=false` (the default) returns only identifiers declared with `public` and/or
+`export`, whereas `private=true` returns all symbols in the module (excluding
+compiler-generated hidden symbols starting with `#`).
+
+See also: [`names`](@ref), [`Docs.hasdoc`](@ref), [`Base.ispublic`](@ref).
+"""
+function undocumented_names(mod::Module; private::Bool=false)
+    filter!(names(mod; all=true)) do sym
+        !hasdoc(mod, sym) && !startswith(string(sym), '#') &&
+            (private || Base.ispublic(mod, sym))
+    end
+end
 
 end

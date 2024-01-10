@@ -986,7 +986,7 @@ function lift_keyvalue_get!(compact::IncrementalCompact, idx::Int, stmt::Expr, ð
     return
 end
 
-# TODO: We could do the whole lifing machinery here, but really all
+# TODO: We could do the whole lifting machinery here, but really all
 # we want to do is clean this up when it got inserted by inlining,
 # which always targets simple `svec` call or `_compute_sparams`,
 # so this specialized lifting would be enough
@@ -1209,10 +1209,11 @@ function sroa_pass!(ir::IRCode, inlining::Union{Nothing,InliningState}=nothing)
         end
         if scope_mapping !== nothing && did_just_finish_bb(compact)
             bb = compact.active_result_bb - 1
-            if isexpr(stmt, :leave)
-                update_scope_mapping!(scope_mapping, bb+1, scope_mapping[block_for_inst(compact, scope_mapping[bb])])
+            bbs = scope_mapping[bb]
+            if isexpr(stmt, :leave) && bbs != SSAValue(0)
+                update_scope_mapping!(scope_mapping, bb+1, scope_mapping[block_for_inst(compact, bbs)])
             else
-                update_scope_mapping!(scope_mapping, bb+1, scope_mapping[bb])
+                update_scope_mapping!(scope_mapping, bb+1, bbs)
             end
         end
         # check whether this statement is `getfield` / `setfield!` (or other "interesting" statement)
@@ -1616,7 +1617,7 @@ function try_resolve_finalizer!(ir::IRCode, idx::Int, finalizer_idx::Int, defuse
     end
 
     # Ok, legality check complete. Figure out the exact statement where we're
-    # gonna inline the finalizer.
+    # going to inline the finalizer.
     loc = bb_insert_idx === nothing ? first(ir.cfg.blocks[bb_insert_block].stmts) : bb_insert_idx::Int
     attach_after = bb_insert_idx !== nothing
 
