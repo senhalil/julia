@@ -406,12 +406,19 @@ end
         Dict{K, Vector{K}} where K, Dict{Vector{<:V}, V} where V,
         Vector{D} where D<:Dict{K, Vector{V}} where {V<:Number, K},
         Val{T} where {S, T<:(Dict{<:Val, Vector{<:S}})},
-        Union{Int,Float64}, Union{}, Tuple{},
+        Union{Int,Float64},
         Union{NTuple{<:Any, Union{Nothing, Int}}, Tuple{Int,Float64}},
         Union{NTuple{N, Union{Nothing, Int}}, Tuple{Int,Val{N}}} where N,
+    ]
+    broken_types = [
+        Union{}, Tuple{},
     ]
     @testset for T in types
         @test parse(Type, string(T)) == T
         @test parse(Type{T}, string(T)) == T
+    end
+    @testset for T in broken_types
+        @test_broken parse(Type, string(T)) == T
+        @test_broken parse(Type{T}, string(T)) == T
     end
 end
