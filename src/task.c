@@ -1061,10 +1061,10 @@ void jl_rng_split(uint64_t dst[JL_RNG_SIZE], uint64_t src[JL_RNG_SIZE]) JL_NOTSA
     // high spectrum multiplier from https://arxiv.org/abs/2001.05304
 
     static const uint64_t a[4] = {
-        0xe5f8fa077b92a8a8, // random additive offsets...
-        0x7a0cd918958c124d,
-        0x86222f7d388588d4,
-        0xd30cbd35f2b64f52
+        0x214c146c88e47cb7, // random additive offsets...
+        0xa66d8cc21285aafa,
+        0x68c7ef2d7b1a54d4,
+        0xb053a7d7aa238c61
     };
     static const uint64_t m[4] = {
         0xaef17502108ef2d9, // standard PCG multiplier
@@ -1075,11 +1075,11 @@ void jl_rng_split(uint64_t dst[JL_RNG_SIZE], uint64_t src[JL_RNG_SIZE]) JL_NOTSA
 
     // PCG-RXS-M-XS-64 output with four variants
     for (int i = 0; i < 4; i++) {
-        uint64_t p = x + a[i];
-        p ^= p >> ((p >> 59) + 5);
-        p *= m[i];
-        p ^= p >> 43;
-        dst[i] = src[i] + p; // SplitMix dot product
+        uint64_t w = x + a[i];
+        w ^= w >> ((w >> 59) + 5);
+        w *= m[i];
+        w ^= w >> 43;
+        dst[i] = src[i] + w; // SplitMix dot product
     }
 }
 
