@@ -1075,11 +1075,12 @@ void jl_rng_split(uint64_t dst[JL_RNG_SIZE], uint64_t src[JL_RNG_SIZE]) JL_NOTSA
 
     // PCG-RXS-M-XS-64 output with four variants
     for (int i = 0; i < 4; i++) {
+        uint64_t s = bswap_64(src[i]);
         uint64_t w = x + a[i];
         w ^= w >> ((w >> 59) + 5);
         w *= m[i];
         w ^= w >> 43;
-        dst[i] = src[i] + w; // SplitMix dot product
+        dst[i] = 2*s*w + s + w; // (2s+1)(2w+1) ÷ 2
     }
 }
 
