@@ -22,7 +22,7 @@ let m = Meta.@lower 1 + 1
     nstmts = length(src.code)
     src.ssavaluetypes = nstmts
     src.ssaflags = fill(UInt8(0x00), nstmts)
-    src.codelocs = fill(Int32(1), nstmts)
+    src.debuginfo = Core.DebugInfo(:none)
     Core.Compiler.verify_ir(Core.Compiler.inflate_ir(src))
     global test29262 = true
     @test :a === @eval $m
@@ -62,7 +62,7 @@ let m = Meta.@lower 1 + 1
     nstmts = length(src.code)
     src.ssavaluetypes = nstmts
     src.ssaflags = fill(UInt8(0x00), nstmts)
-    src.codelocs = fill(Int32(1), nstmts)
+    src.debuginfo = Core.DebugInfo(:none)
     m.args[1] = copy(src)
     Core.Compiler.verify_ir(Core.Compiler.inflate_ir(src))
     global test29262 = true
@@ -100,7 +100,7 @@ let m = Meta.@lower 1 + 1
     nstmts = length(src.code)
     src.ssavaluetypes = nstmts
     src.ssaflags = fill(UInt8(0x00), nstmts)
-    src.codelocs = fill(Int32(1), nstmts)
+    src.debuginfo = Core.DebugInfo(:none)
     Core.Compiler.verify_ir(Core.Compiler.inflate_ir(src))
     global test29262 = true
     @test :a === @eval $m

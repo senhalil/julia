@@ -767,3 +767,61 @@ Boolean properties:
     * 0x01 << 4 = the syntactic control flow within this method is guaranteed to terminate (`:terminates_locally`)
 
     See the documentation of `Base.@assume_effects` for more details.
+
+
+How to interpret line numbers in a `CodeInfo` object:
+
+```
+struct DebugInfo
+    @noinline
+    def::Union{Method,MethodInstance,Symbol}
+    linetable::Union{Nothing,DebugInfo}
+    edges::SimpleVector{DebugInfo}
+    codelocs::String # compressed data
+end
+mutable struct DebugInfoStream
+    def::Union{Method,MethodInstance,Symbol}
+    linetable::Union{Nothing,DebugInfo}
+    edges::Vector{DebugInfo}
+    firstline::Int32 # the starting line for this block (specified by an index of 0)
+    codelocs::Vector{Int32} # for each statement:
+        # index into linetable (if defined), else a line number (in the file represented by def)
+        # then index into edges
+        # then index into edges[linetable]
+end
+```
+
+
+  * `def` : where this DebugInfo was defined (the Method, MethodInstance, or file scope, for example)
+
+  * `linetable`
+
+    Another debuginfo that this was derived from. If `def` is not a Symbol, then it replaces
+    the current function for metadata. The codelocs line number also becomes an index into
+    this codelocs instead of being a line number itself, as described below.
+
+  * `edges` : Vector of the unique DebugInfo for every inlined function
+
+  * `firstline` (when uncompressed to DebugInfoStream)
+
+    The line number associated with the `begin` statement (or other keyword such as
+    `function` or `quote`) that delinated where this code definition "starts".
+
+  * `codelocs` (when uncompressed to DebugInfoStream)
+
+    A vector of indices, with 3 values for each statement in the IR plus one for the
+    starting point of the block, that describe the stacktrace from that point:
+     1. the integer index into the `linetable.codelocs` field, giving the original location
+        associated with each statement (including its edges), or zero indicating to use
+        `linetable.firstline` as the line number.
+       or
+       the line number itself if the `linetable` field is `nothing`
+     2. the integer index into edges, giving the DebugInfo inlined there (or zero if there
+        are no edges).
+     3. (if entry 2 is non-zero) the integer index into edges[].codelocs, giving the
+        recursion point, or zero indicating to use `edges[].firstline` as the line number.
+
+   Special codes include:
+     - (zero, zero, *) : no change to the line number or edges
+     - (zero, *, *) : no line number, just edges (usually because of macro-expansion into
+       top-level code)

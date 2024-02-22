@@ -8,6 +8,7 @@ module StackTraces
 
 import Base: hash, ==, show
 import Core: CodeInfo, MethodInstance
+using Base.IRShow: debuginfo_file1, normalize_method_name # or import buildLineInfoNode?
 
 export StackTrace, StackFrame, stacktrace
 
@@ -112,7 +113,11 @@ Base.@constprop :none function lookup(pointer::Ptr{Cvoid})
     for i in 1:length(infos)
         info = infos[i]::Core.SimpleVector
         @assert(length(info) == 6)
-        res[i] = StackFrame(info[1]::Symbol, info[2]::Symbol, info[3]::Int, info[4], info[5]::Bool, info[6]::Bool, pointer)
+        func = info[1]::Symbol
+        file = info[2]::Symbol
+        linenum = info[3]::Int
+        linfo = info[4]
+        res[i] = StackFrame(func, file, linenum, linfo, info[5]::Bool, info[6]::Bool, pointer)
     end
     return res
 end
@@ -136,18 +141,35 @@ function lookup(ip::Union{Base.InterpreterIP,Core.Compiler.InterpreterIP})
         file = empty_sym
         line = Int32(0)
     end
-    i = max(ip.stmt+1, 1)  # ip.stmt is 0-indexed
-    if i > length(codeinfo.codelocs) || codeinfo.codelocs[i] == 0
+    pc::Int = max(ip.stmt + 1, 0) # n.b. ip.stmt is 0-indexed
+    debuginfo = codeinfo.debuginfo
+    codeloc = @ccall jl_uncompress1_codeloc(debuginfo.codelocs::Any, pc::Int)::NTuple{3,Int32}
+    if (codeloc[1] == 0 && codeloc[2] == 0) || codeloc[1] < 0
         return [StackFrame(func, file, line, code, false, false, 0)]
     end
-    lineinfo = codeinfo.linetable[codeinfo.codelocs[i]]::Core.LineInfoNode
     scopes = StackFrame[]
-    while true
-        inlined = lineinfo.inlined_at != 0
-        push!(scopes, StackFrame(Base.IRShow.method_name(lineinfo)::Symbol, lineinfo.file, lineinfo.line, inlined ? nothing : code, false, inlined, 0))
-        inlined || break
-        lineinfo = codeinfo.linetable[lineinfo.inlined_at]::Core.LineInfoNode
+    inlined = false
+    def = (code isa MethodInstance ? code : StackTraces) # Module just used as a token
+    function append_scopes!(scopes::Vector{StackFrame}, pc::Int, debuginfo::Core.DebugInfo, @nospecialize(def), inlined::Bool)
+        while true
+            debuginfo.def isa Symbol || (def = debuginfo.def)
+            codeloc = @ccall jl_uncompress1_codeloc(debuginfo.codelocs::Any, pc::Int)::NTuple{3,Int32}
+            line = codeloc[1]
+            if debuginfo.linetable === nothing || pc <= 0 || line < 0
+                line < 0 && (line = 0) # broken debug info?
+                push!(scopes, StackFrame(normalize_method_name(def), debuginfo_file1(debuginfo), line, inlined ? nothing : code, false, inlined, 0))
+            else
+                append_scopes!(scopes, line - 1, debuginfo.linetable::Core.DebugInfo, def, inlined)
+            end
+            inlined = true
+            def = :var"macro expansion"
+            inl_to::Int = codeloc[2]
+            inl_to == 0 && break
+            debuginfo = debuginfo.edges[inl_to]
+            pc::Int = codeloc[3]
+        end
     end
+    append_scopes!(scopes, pc, debuginfo, def, false)
     return scopes
 end
 
