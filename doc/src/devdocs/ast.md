@@ -811,9 +811,10 @@ end
 
     A vector of indices, with 3 values for each statement in the IR plus one for the
     starting point of the block, that describe the stacktrace from that point:
-     1. the integer index into the `linetable.codelocs` field, giving the original location
-        associated with each statement (including its edges), or zero indicating to use
-        `linetable.firstline` as the line number.
+     1. the integer index into the `linetable.codelocs` field, giving the
+        original location associated with each statement (including its syntatic edges),
+        or zero indicating no change to the line number from the previously
+        executed statement (which is not necessarily syntatic or lexical prior).
        or
        the line number itself if the `linetable` field is `nothing`
      2. the integer index into edges, giving the DebugInfo inlined there (or zero if there

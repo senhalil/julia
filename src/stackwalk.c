@@ -718,8 +718,8 @@ static void jl_print_debugloc(jl_debuginfo_t *debuginfo, jl_value_t *func, size_
         jl_print_debugloc(debuginfo->linetable, func, ip2, 0);
     }
     else {
-        if (ip2 < 0)
-            ip2 = 0; // broken debug info?
+        if (ip2 < 0) // set broken debug info to ignored
+            ip2 = 0;
         const char *func_name = jl_debuginfo_name(func);
         const char *file = jl_debuginfo_file(debuginfo);
         jl_safe_print_codeloc(func_name, file, ip2, inlined);

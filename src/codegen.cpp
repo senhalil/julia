@@ -8674,14 +8674,8 @@ static jl_llvm_functions_t
     SmallVector<DebugLineTable, 0> prev_lineinfo, new_lineinfo;
     new_lineinfo.push_back(topinfo);
     auto update_lineinfo = [&] (size_t pc) {
-        jl_debuginfo_t *debuginfo = src->debuginfo;
-        struct jl_codeloc_t lineidx = jl_uncompress1_codeloc(debuginfo->codelocs, pc + 1);
-        if (lineidx.line == 0 && lineidx.to == 0)
-            return false; // do not change anything
-        prev_lineinfo.resize(0);
-        std::swap(prev_lineinfo, new_lineinfo);
-        std::function<void(jl_debuginfo_t*, jl_value_t*, size_t, size_t)> append_lineinfo =
-                [&] (jl_debuginfo_t *debuginfo, jl_value_t *func, size_t to, size_t pc) -> void {
+        std::function<bool(jl_debuginfo_t*, jl_value_t*, size_t, size_t)> append_lineinfo =
+                [&] (jl_debuginfo_t *debuginfo, jl_value_t *func, size_t to, size_t pc) -> bool {
             while (1) {
                 if (!jl_is_symbol(debuginfo->def)) // this is a path
                     func = debuginfo->def; // this is inlined
@@ -8689,11 +8683,14 @@ static jl_llvm_functions_t
                 size_t i = lineidx.line;
                 if (pc > 0 && i >= 0 && (jl_value_t*)debuginfo->linetable != jl_nothing) {
                     // indirection node
-                    append_lineinfo(debuginfo->linetable, func, to, i);
+                    if (!append_lineinfo(debuginfo->linetable, func, to, i))
+                        return false; // no update
                 }
                 else {
-                    if (i < 0)
-                        i = 0; // pc out of range: broken debuginfo?
+                    if (i < 0) // pc out of range: broken debuginfo?
+                        return false;
+                    if (i == 0 && lineidx.to == 0) // no update
+                        return false;
                     // actual node
                     DebugLineTable info;
                     info.edgeid = to;
@@ -8739,15 +8736,20 @@ static jl_llvm_functions_t
                 }
                 to = lineidx.to;
                 if (to == 0)
-                    break;
+                    return true;
                 pc = lineidx.pc;
                 debuginfo = (jl_debuginfo_t*)jl_svecref(debuginfo->edges, to - 1);
                 func = NULL;
             }
         };
-        append_lineinfo(debuginfo, (jl_value_t*)lam, 0, pc + 1);
-        assert(new_lineinfo.size() > 0);
-        return true;
+        prev_lineinfo.resize(0);
+        std::swap(prev_lineinfo, new_lineinfo);
+        bool updated = append_lineinfo(src->debuginfo, (jl_value_t*)lam, 0, pc + 1);
+        if (!updated)
+            std::swap(prev_lineinfo, new_lineinfo);
+        else
+            assert(new_lineinfo.size() > 0);
+        return updated;
     };
 
     SmallVector<MDNode*, 0> aliasscopes;
@@ -8903,7 +8905,7 @@ static jl_llvm_functions_t
             bool is_tracked = in_tracked_path(file);
             if (do_coverage(is_user_code, is_tracked)) {
                 for (size_t pc = 0; 1; pc++) {
-                    struct jl_codeloc_t lineidx = jl_uncompress1_codeloc(debuginfo->codelocs, pc + 1);
+                    struct jl_codeloc_t lineidx = jl_uncompress1_codeloc(debuginfo->codelocs, pc);
                     if (lineidx.line == -1)
                         break;
                     jl_debuginfo_t *linetable = debuginfo->linetable;

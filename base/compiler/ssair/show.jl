@@ -360,36 +360,35 @@ end
 
 # utility function for converting a debuginfo object a particular pc to list of LineInfoNodes representing the inlining info at that pc for function `def`
 # which is either `nothing` (macro-expand), a module (top-level), a Method (unspecialized code) or a MethodInstance (specialized code)
+# Returns `false` if the line info should not be updated with this info because this
+# statement has no effect on the line numbers. The `scopes` will still be populated however
+# with as much information as was available about the inlining at that statement.
+function append_scopes!(scopes::Vector{LineInfoNode}, pc::Int, debuginfo, @nospecialize(def))
+    doupdate = true
+    while true
+        debuginfo.def isa Symbol || (def = debuginfo.def)
+        codeloc = getdebugidx(debuginfo, pc)
+        line::Int = codeloc[1]
+        inl_to::Int = codeloc[2]
+        if debuginfo.linetable === nothing || pc <= 0 || line < 0
+            line < 0 && (line = 0) # broken debug info
+            doupdate &= line != 0 || inl_to != 0 # disabled debug info--no update
+            push!(scopes, LineInfoNode(def, debuginfo_file1(debuginfo), Int32(line)))
+        else
+            doupdate = append_scopes!(scopes, line, debuginfo.linetable::Core.DebugInfo, def) && doupdate
+        end
+        inl_to == 0 && return doupdate
+        def = :var"macro expansion"
+        debuginfo = debuginfo.edges[inl_to]
+        pc::Int = codeloc[3]
+    end
+end
+
+# utility wrapper around `append_scopes!` that returns an empty list instead of false
+# when there is no applicable line update
 function buildLineInfoNode(debuginfo, @nospecialize(def), pc::Int)
     DI = LineInfoNode[]
-    pc == 0 && return DI
-    let codeloc = getdebugidx(debuginfo, pc)
-        line::Int = codeloc[1]
-        line < 0 && return DI # broken or disabled debug info?
-        if line == 0 && codeloc[2] == 0
-            return DI # no update
-        end
-    end
-    function append_scopes!(scopes::Vector{LineInfoNode}, pc::Int, debuginfo, @nospecialize(def))
-        while true
-            debuginfo.def isa Symbol || (def = debuginfo.def)
-            codeloc = getdebugidx(debuginfo, pc)
-            line::Int = codeloc[1]
-            line < 0 && return # broken or disabled debug info?
-            if debuginfo.linetable === nothing || line == 0
-                push!(scopes, LineInfoNode(def, debuginfo_file1(debuginfo), Int32(line)))
-            else
-                append_scopes!(scopes, line, debuginfo.linetable::Core.DebugInfo, def)
-            end
-            def = :var"macro expansion"
-            inl_to::Int = codeloc[2]
-            inl_to == 0 && break
-            debuginfo = debuginfo.edges[inl_to]
-            pc::Int = codeloc[3]
-            pc == 0 && break # TODO: use toplevel line?
-        end
-    end
-    append_scopes!(DI, pc, debuginfo, def)
+    append_scopes!(DI, pc, debuginfo, def) || empty!(DI)
     return DI
 end
 

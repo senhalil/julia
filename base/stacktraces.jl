@@ -8,7 +8,7 @@ module StackTraces
 
 import Base: hash, ==, show
 import Core: CodeInfo, MethodInstance
-using Base.IRShow: debuginfo_file1, normalize_method_name # or import buildLineInfoNode?
+using Base.IRShow: normalize_method_name, append_scopes!, LineInfoNode
 
 export StackTrace, StackFrame, stacktrace
 
@@ -21,10 +21,10 @@ Stack information representing execution context, with the following fields:
 
   The name of the function containing the execution context.
 
-- `linfo::Union{Core.MethodInstance, Method, Module, Core.CodeInfo, Nothing}`
+- `linfo::Union{Method, Core.MethodInstance, Core.CodeInfo, Nothing}`
 
-  The MethodInstance or CodeInfo containing the execution context (if it could be found), \
-     or Module (for macro expansions)"
+  The Method, MethodInstance, or CodeInfo containing the execution context (if it could be found), \
+     or nothing (for example, if the inlining was a result of macro expansion).
 
 - `file::Symbol`
 
@@ -55,8 +55,8 @@ struct StackFrame # this type should be kept platform-agnostic so that profiles 
     "the line number in the file containing the execution context"
     line::Int
     "the MethodInstance or CodeInfo containing the execution context (if it could be found), \
-     or Module (for macro expansions)"
-    linfo::Union{MethodInstance, Method, Module, CodeInfo, Nothing}
+     or nothing (for example, if the inlining was a result of macro expansion)."
+    linfo::Union{MethodInstance, Method, CodeInfo, Nothing}
     "true if the code is from C"
     from_c::Bool
     "true if the code is from an inlined frame"
@@ -141,35 +141,25 @@ function lookup(ip::Union{Base.InterpreterIP,Core.Compiler.InterpreterIP})
         file = empty_sym
         line = Int32(0)
     end
+    def = (code isa MethodInstance ? code : StackTraces) # Module just used as a token for top-level code
     pc::Int = max(ip.stmt + 1, 0) # n.b. ip.stmt is 0-indexed
-    debuginfo = codeinfo.debuginfo
-    codeloc = @ccall jl_uncompress1_codeloc(debuginfo.codelocs::Any, pc::Int)::NTuple{3,Int32}
-    if (codeloc[1] == 0 && codeloc[2] == 0) || codeloc[1] < 0
+    scopes = LineInfoNode[]
+    append_scopes!(scopes, pc, codeinfo.debuginfo, def)
+    if isempty(scopes)
         return [StackFrame(func, file, line, code, false, false, 0)]
     end
-    scopes = StackFrame[]
     inlined = false
-    def = (code isa MethodInstance ? code : StackTraces) # Module just used as a token
-    function append_scopes!(scopes::Vector{StackFrame}, pc::Int, debuginfo::Core.DebugInfo, @nospecialize(def), inlined::Bool)
-        while true
-            debuginfo.def isa Symbol || (def = debuginfo.def)
-            codeloc = @ccall jl_uncompress1_codeloc(debuginfo.codelocs::Any, pc::Int)::NTuple{3,Int32}
-            line = codeloc[1]
-            if debuginfo.linetable === nothing || pc <= 0 || line < 0
-                line < 0 && (line = 0) # broken debug info?
-                push!(scopes, StackFrame(normalize_method_name(def), debuginfo_file1(debuginfo), line, inlined ? nothing : code, false, inlined, 0))
-            else
-                append_scopes!(scopes, line - 1, debuginfo.linetable::Core.DebugInfo, def, inlined)
-            end
-            inlined = true
-            def = :var"macro expansion"
-            inl_to::Int = codeloc[2]
-            inl_to == 0 && break
-            debuginfo = debuginfo.edges[inl_to]
-            pc::Int = codeloc[3]
+    scopes = map(scopes) do lno
+        if inlined
+            def = lno.method
+            def isa Union{Method,MethodInstance} || (def = nothing)
+        else
+            def = codeinfo
         end
+        sf = StackFrame(normalize_method_name(lno.method), lno.file, lno.line, def, false, inlined, 0)
+        inlined = true
+        return sf
     end
-    append_scopes!(scopes, pc, debuginfo, def, false)
     return scopes
 end
 
