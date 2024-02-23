@@ -789,7 +789,7 @@ function precompilepkgs(pkgs::Vector{String}=String[]; internal_call::Bool=false
                 notify(was_processed[pkg])
             catch err_outer
                 # For debugging:
-                # @error "Task failed" exception=(err_outer, catch_backtrace())
+                @error "Task failed" exception=(err_outer, catch_backtrace())
                 handle_interrupt(err_outer) || rethrow()
                 notify(was_processed[pkg])
             finally
